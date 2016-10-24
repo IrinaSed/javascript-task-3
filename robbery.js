@@ -21,8 +21,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     var tue = [];
     var wed = [];
     var days = { 1: mon, 2: tue, 3: wed };
-
-
+    
     return {
         countTime: 0,
 
