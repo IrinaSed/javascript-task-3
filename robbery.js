@@ -75,14 +75,18 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 return this.moments[this.countTime];
             }
 
-            if (this.countTime < this.moments.length - 1) {
+            while (this.countTime < this.moments.length - 1) {
                 this.countTime++;
-
-                return this.moments[this.countTime];
+                var next = this.moments[this.countTime].valueOf();
+                var prev = this.moments[this.countTime - 1].valueOf() + 30 * 60000;
+                if (next >= prev) {
+                    return this.moments[this.countTime];
+                }
             }
 
             return false;
         }
+
     };
 
     function findExistFlourHour(indDay, hour, minutes, obj) {
