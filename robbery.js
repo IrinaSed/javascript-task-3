@@ -21,18 +21,19 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     var tue = [];
     var wed = [];
     var days = { 1: mon, 2: tue, 3: wed };
-    var moments = findExistMoments(schedule, duration, workingHours, days);
 
 
     return {
         countTime: 0,
+
+        moments: findExistMoments(schedule, duration, workingHours, days).sort(),
 
         /**
          * Найдено ли время
          * @returns {Boolean}
          */
         exists: function () {
-            return moments.length > 0;
+            return this.moments.length > 0;
         },
 
 
@@ -47,10 +48,11 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         format: function (template) {
             if (this.exists()) {
                 var ind = this.countTime;
+                var day = dayWeekOnNumber[this.moments[ind].getDay() - 1];
 
-                return template.replace('%HH', pad(moments[ind].getHours()))
-                               .replace('%MM', pad(moments[ind].getMinutes()))
-                               .replace('%DD', dayWeekOnNumber[moments[ind].getDay() - 1]);
+                return template.replace('%HH', pad(this.moments[ind].getHours()))
+                               .replace('%MM', pad(this.moments[ind].getMinutes()))
+                               .replace('%DD', day);
 
             }
 
@@ -63,31 +65,31 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
-            var indDay = moments[this.countTime].getDay();
-            var hour = moments[this.countTime].getHours();
-            var minutes = moments[this.countTime].getMinutes() + duration + 30;
-            if (findExistFlourHour(indDay, hour, minutes, this.countTime)) {
+            var indDay = this.moments[this.countTime].getDay();
+            var hour = this.moments[this.countTime].getHours();
+            var minutes = this.moments[this.countTime].getMinutes() + duration + 30;
+            if (findExistFlourHour(indDay, hour, minutes, this)) {
                 var newTime = createDate(indDay, hour + ':' + (minutes - duration) + '+0', 0);
                 this.countTime++;
-                moments.splice(this.countTime, 0, newTime);
+                this.moments.splice(this.countTime, 0, newTime);
 
-                return moments[this.countTime];
+                return this.moments[this.countTime];
             }
 
-            if (this.countTime < moments.length - 1) {
+            if (this.countTime < this.moments.length - 1) {
                 this.countTime++;
 
-                return moments[this.countTime];
+                return this.moments[this.countTime];
             }
 
             return false;
         }
     };
 
-    function findExistFlourHour(indDay, hour, minutes, ind) {
+    function findExistFlourHour(indDay, hour, minutes, obj) {
         var workTimeBank = createWorkTime(indDay, workingHours);
         var timeRobberyTo = createDate(indDay, hour + ':' + minutes + '+0', 0);
-        var robberyInterval = { from: moments[ind], to: timeRobberyTo };
+        var robberyInterval = { from: obj.moments[obj.countTime], to: timeRobberyTo };
         var existFloorHour = true;
         existFloorHour = existFloorHour && haveTimeInWorkTime(robberyInterval, workTimeBank);
         existFloorHour = existFloorHour && notIntersectWithOther(robberyInterval, -1, days[indDay]);
@@ -223,7 +225,6 @@ function checkTime(day, workTimeBank, timeForRobbery, moments) {
     }
 
     function checkTimeBegWorkBank() {
-        moments.sort();
         if (moments.length !== 0) {
             var momentNotExist = true;
             moments.forEach(function (item) {
