@@ -16,7 +16,7 @@ exports.isStar = true;
  */
 var dayWeekOnNumber = ['ПН', 'ВТ', 'СР'];
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
-   // console.info(schedule, duration, workingHours);
+    // console.info(schedule, duration, workingHours);
     var mon = [];
     var tue = [];
     var wed = [];
@@ -50,8 +50,8 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 var day = dayWeekOnNumber[this.moments[ind].getDay() - 1];
 
                 return template.replace('%HH', pad(this.moments[ind].getHours()))
-                               .replace('%MM', pad(this.moments[ind].getMinutes()))
-                               .replace('%DD', day);
+                    .replace('%MM', pad(this.moments[ind].getMinutes()))
+                    .replace('%DD', day);
 
             }
 
@@ -129,8 +129,8 @@ function findExistMoments(schedule, duration, workingHours, days) {
         var dateTimeFrom = createDate(dayFrom, dateFrom[1], timeZoneBank);
         var dateTimeTo = createDate(dayTo, dateTo[1], timeZoneBank);
         // dayFrom и dayTo может измениться из-за перевода к одному часовому поясу
-        dayFrom = dateTimeFrom.getUTCDay();
-        dayTo = dateTimeTo.getUTCDay();
+        dayFrom = dateTimeFrom.getDay();
+        dayTo = dateTimeTo.getDay();
         if (dayFrom < dayTo) {
             divideTime(dayFrom, dayTo, dateTimeFrom, dateTimeTo);
         } else {
@@ -208,7 +208,7 @@ function findTime(days, workingHours, timeForRobbery) {
 }
 
 function checkTime(day, workTimeBank, timeForRobbery, moments) {
-    var indexDay = day[0].from.getUTCDay();
+    var indexDay = day[0].from.getDay();
     day.forEach(function (item, indItem) {
         var dateFrom = createDateWithOffset(item.from, indexDay, -timeForRobbery);
         var dateTo = createDateWithOffset(item.to, indexDay, timeForRobbery);
