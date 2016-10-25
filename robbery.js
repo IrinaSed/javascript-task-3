@@ -119,7 +119,7 @@ function busyBank(workingHours) {
     var busy = [];
     var timeZone = workingHours.from.split('+')[1];
     busy.push({ from: '00:00+' + timeZone, to: workingHours.from });
-    busy.push({ from: workingHours.to, to: '23:59+' + timeZone });
+    busy.push({ from: workingHours.to, to: '23:59:59+' + timeZone });
 
     return findBusyforDay(busy);
 }
