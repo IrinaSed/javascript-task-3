@@ -14,18 +14,17 @@ exports.isStar = true;
  * @param {String} workingHours.to – Время закрытия, например, "18:00+5"
  * @returns {Object}
  */
-var dayWeekOnNumber = ['ПН', 'ВТ', 'СР'];
+
+var DAYWEEK = ['ПН', 'ВТ', 'СР'];
+var DAY = { 'ПН': 1, 'ВТ': 2, 'СР': 3, 'ЧТ': 4, 'ПТ': 5, 'СБ': 6, 'ВС': 7 };
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     // console.info(schedule, duration, workingHours);
-    var mon = [];
-    var tue = [];
-    var wed = [];
-    var days = { 1: mon, 2: tue, 3: wed };
-
     return {
         countTime: 0,
 
-        moments: findExistMoments(schedule, duration, workingHours, days).sort(),
+        moments: findMoments(findBusyInterval(schedule, workingHours), duration),
+
+        timeZone: parseInt(workingHours.from.split('+')[1]),
 
         /**
          * Найдено ли время
@@ -47,10 +46,11 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
         format: function (template) {
             if (this.exists()) {
                 var ind = this.countTime;
-                var day = dayWeekOnNumber[this.moments[ind].getDay() - 1];
+                var timeARobbery = new Date(this.moments[ind].from + this.timeZone * 60 * 60000);
+                var day = DAYWEEK[timeARobbery.getUTCDay() - 1];
 
-                return template.replace('%HH', pad(this.moments[ind].getHours()))
-                    .replace('%MM', pad(this.moments[ind].getMinutes()))
+                return template.replace('%HH', pad(timeARobbery.getUTCHours()))
+                    .replace('%MM', pad(timeARobbery.getUTCMinutes()))
                     .replace('%DD', day);
 
             }
@@ -64,41 +64,27 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
-            var indDay = this.moments[this.countTime].getDay();
-            var hour = this.moments[this.countTime].getHours();
-            var minutes = this.moments[this.countTime].getMinutes() + duration + 30;
-            if (findExistFlourHour(indDay, hour, minutes, this)) {
-                var newTime = createDate(indDay, hour + ':' + (minutes - duration) + '+0', 0);
-                this.countTime++;
-                this.moments.splice(this.countTime, 0, newTime);
+            var timeARobbery = (duration + 30) * 60 * 1000;
+            var ind = this.countTime;
+            if (this.moments[ind].to - this.moments[ind].from >= timeARobbery) {
+                var newFrom = this.moments[ind].from + 30 * 60000;
+                this.moments[ind] = { from: newFrom, to: this.moments[ind].to };
 
-                return this.moments[this.countTime];
+                return this.moments[ind];
             }
 
             while (this.countTime < this.moments.length - 1) {
                 this.countTime++;
-                var next = this.moments[this.countTime].valueOf();
-                var prev = this.moments[this.countTime - 1].valueOf() + 30 * 60000;
-                if (next >= prev) {
+                var curr = this.moments[this.countTime].from;
+                var prev = this.moments[this.countTime - 1].from;
+                if (curr - prev >= 30 * 6000) {
                     return this.moments[this.countTime];
                 }
             }
 
             return false;
         }
-
     };
-
-    function findExistFlourHour(indDay, hour, minutes, obj) {
-        var workTimeBank = createWorkTime(indDay, workingHours);
-        var timeRobberyTo = createDate(indDay, hour + ':' + minutes + '+0', 0);
-        var robberyInterval = { from: obj.moments[obj.countTime], to: timeRobberyTo };
-        var existFloorHour = true;
-        existFloorHour = existFloorHour && haveTimeInWorkTime(robberyInterval, workTimeBank);
-        existFloorHour = existFloorHour && notIntersectWithOther(robberyInterval, -1, days[indDay]);
-
-        return existFloorHour;
-    }
 };
 
 function pad(num) {
@@ -107,180 +93,100 @@ function pad(num) {
     return num;
 }
 
-function findExistMoments(schedule, duration, workingHours, days) {
-    var daysWeek = { ПН: 1, ВТ: 2, СР: 3 };
-    var moments = [];
-    var timeZoneBank = parseInt(workingHours.from.split('+')[1]);
-    createBusyOnDays(schedule);
-    moments = findTime(days, workingHours, duration);
+function findBusyTime(schedule, workingHours) {
+    var busy = [];
+    addBusy(busy, schedule.Linus);
+    addBusy(busy, schedule.Rusty);
+    addBusy(busy, schedule.Danny);
+    addBusy(busy, busyBank(workingHours));
 
-
-    function createBusyOnDays() {
-        schedule.Danny.forEach(parseNote);
-        schedule.Rusty.forEach(parseNote);
-        schedule.Linus.forEach(parseNote);
-    }
-
-    function parseNote(item) {
-        var dateFrom = item.from.split(' ');
-        var dateTo = item.to.split(' ');
-        var dayFrom = daysWeek[dateFrom[0]];
-        var dayTo = daysWeek[dateTo[0]];
-        var dateTimeFrom = createDate(dayFrom, dateFrom[1], timeZoneBank);
-        var dateTimeTo = createDate(dayTo, dateTo[1], timeZoneBank);
-        // dayFrom и dayTo может измениться из-за перевода к одному часовому поясу
-        dayFrom = dateTimeFrom.getDay();
-        dayTo = dateTimeTo.getDay();
-        if (dayFrom < dayTo) {
-            divideTime(dayFrom, dayTo, dateTimeFrom, dateTimeTo);
-        } else {
-            addInterval(days[dayFrom], { from: dateTimeFrom, to: dateTimeTo });
+    return busy.sort(function (a, b) {
+        if (a.from > b.from) {
+            return 1;
         }
-    }
-
-    function divideTime(dayFrom, dayTo, dateTimeFrom, dateTimeTo) {
-        while (dayFrom !== dayTo) {
-            var endDay = createDate(dayFrom, '23:59+' + timeZoneBank, timeZoneBank);
-            addInterval(days[dayFrom], { from: dateTimeFrom, to: endDay });
-            dayFrom++;
-            dateTimeFrom = createDate(dayFrom, '00:00+' + timeZoneBank, timeZoneBank);
+        if (a.from < b.from) {
+            return -1;
         }
-        if (dayTo < 4) {
-            addInterval(days[dayFrom], { from: dateTimeFrom, to: dateTimeTo });
-        }
-    }
 
-    return moments;
+        return 0;
+    });
 }
 
-function belongDateIntervalWithEndSegment(interval, date) {
-    return interval.from <= date && interval.to >= date;
+function busyBank(workingHours) {
+    var busy = [];
+    var timeZone = workingHours.from.split('+')[1];
+    if (workingHours.from.slice(0, 5) !== '00:00') {
+        busy.push({ from: '00:00+' + timeZone, to: workingHours.from });
+    }
+    if (workingHours.to.slice(0, 5) !== '23:59') {
+        busy.push({ from: workingHours.to, to: '23:59+' + timeZone });
+    }
+
+    return findBusyforDay(busy);
 }
 
-function addInterval(day, newInterval) {
-    if (day.length === 0) {
-        day.push(newInterval);
-    } else {
-        day.forEach(function (item, ind) {
-            if (belongDateIntervalWithEndSegment(item, newInterval.from)) {
-                if (!belongDateIntervalWithEndSegment(item, newInterval.to)) {
-                    day[ind] = { from: item.from, to: newInterval.to };
-                }
-            } else if (belongDateIntervalWithEndSegment(item, newInterval.to)) {
-                if (!belongDateIntervalWithEndSegment(item, newInterval.from)) {
-                    day[ind] = { from: newInterval.from, to: item.to };
-                }
-            } else if (belongDateIntervalWithEndSegment(newInterval, item.from)) {
-                day[ind] = { from: newInterval.from, to: newInterval.to };
-            } else {
-                day.push({ from: newInterval.from, to: newInterval.to });
-            }
+function findBusyforDay(busy) {
+    var newBusy = [];
+    DAYWEEK.forEach(function (itemDay) {
+        busy.forEach(function (item) {
+            newBusy.push({ from: itemDay + ' ' + item.from, to: itemDay + ' ' + item.to });
         });
+    });
+
+    return newBusy;
+}
+
+function addBusy(busy, timetable) {
+    timetable.forEach(function (item) {
+        busy.push({ from: parseDate(item.from), to: parseDate(item.to) });
+    });
+}
+
+function parseDate(note) {
+    note = note.split(' ');
+    var day = DAY[note[0]];
+    var time = note[1].split('+')[0];
+    var timeZone = pad(note[1].split('+')[1]) + '00';
+
+
+    return Date.parse('2 ' + day + ' 2016 ' + time + ' GMT+' + timeZone);
+}
+
+
+function disjointBusy(busy) {
+    var disBusy = [busy[0]];
+    var ind = 0;
+    busy.forEach(function (item) {
+        if (disBusy[ind].to <= item.to) {
+            if (disBusy[ind].to >= item.from) {
+                disBusy[ind] = { from: disBusy[ind].from, to: item.to };
+            } else {
+                disBusy.push(item);
+                ind++;
+            }
+        }
+    });
+
+    return disBusy;
+}
+
+function findBusyInterval(schedule, workingHours) {
+    var busy = findBusyTime(schedule, workingHours);
+    if (busy.length !== 0) {
+        return disjointBusy(busy);
     }
-}
 
-// обработку даты на корректность не делаем из-за условии задачи
-function createDate(day, noteTime, timeZoneBank) {
-    var time = noteTime.split('+');
-    var currentTimeZone = parseInt(time[1]);
-    var hour = parseInt(time[0].split(':')[0]);
-    var minute = parseInt(time[0].split(':')[1]);
-    hour += timeZoneBank - currentTimeZone;
-
-    return new Date(2016, 1, day, hour, minute);
+    return [];
 }
 
 
-function findTime(days, workingHours, timeForRobbery) {
+function findMoments(busyInterval, duration) {
     var moments = [];
-    for (var i = 1; i < 4; i++) {
-        var indexDay = i;
-        var day = days[i];
-        var workTimeBank = createWorkTime(indexDay, workingHours);
-        if (day.length === 0) {
-            moments.push(workTimeBank.from);
-        } else {
-            checkTime(day, workTimeBank, timeForRobbery, moments);
+    for (var i = 0; i < busyInterval.length - 1; i++) {
+        if (busyInterval[i + 1].from - busyInterval[i].to >= duration * 60000) {
+            moments.push({ from: busyInterval[i].to, to: busyInterval[i + 1].from });
         }
     }
 
     return moments;
-}
-
-function checkTime(day, workTimeBank, timeForRobbery, moments) {
-    var indexDay = day[0].from.getDay();
-    day.forEach(function (item, indItem) {
-        var dateFrom = createDateWithOffset(item.from, indexDay, -timeForRobbery);
-        var dateTo = createDateWithOffset(item.to, indexDay, timeForRobbery);
-        var begInterval = { from: dateFrom, to: item.to };
-        var endInterval = { from: item.from, to: dateTo };
-        appropriateTime(begInterval, indItem, begInterval.from);
-        appropriateTime(endInterval, indItem, item.to);
-        checkTimeBegWorkBank();
-    });
-
-    function appropriateTime(interval, indItem, result) {
-        if (haveTimeInWorkTime(interval, workTimeBank)) {
-            if (notIntersectWithOther(interval, indItem, day)) {
-                moments.push(result);
-            }
-        }
-    }
-
-    function checkTimeBegWorkBank() {
-        if (moments.length !== 0) {
-            var momentNotExist = true;
-            moments.forEach(function (item) {
-                momentNotExist = momentNotExist && item.valueOf() !== workTimeBank.from.valueOf();
-            });
-            if (momentNotExist) {
-                var hour = workTimeBank.from.getHours();
-                var minutes = workTimeBank.from.getMinutes() + timeForRobbery;
-                var dateTo = createDate(indexDay, hour + ':' + minutes + '+0', 0);
-                appropriateTime({ from: workTimeBank.from, to: dateTo }, -1, workTimeBank.from);
-            }
-        }
-    }
-}
-
-
-function createWorkTime(day, workingHours) {
-    var timeZoneBank = workingHours.from[workingHours.from.length - 1];
-    var timeFrom = createDate(day, workingHours.from, timeZoneBank);
-    var timeTo = createDate(day, workingHours.to, timeZoneBank);
-
-    return { from: timeFrom, to: timeTo };
-}
-
-function createDateWithOffset(date, indexDay, timeForRobbery) {
-    var hour = date.getHours();
-    var minutes = date.getMinutes();
-    var note = hour + ':' + (minutes + timeForRobbery) + '+0';
-
-    return createDate(indexDay, note, 0);
-}
-
-function haveTimeInWorkTime(interval, workTimeBank) {
-    var result = belongDateIntervalWithEndSegment(workTimeBank, interval.from);
-    result = result && belongDateIntervalWithEndSegment(workTimeBank, interval.to);
-
-    return result;
-}
-
-function belongDateInterval(interval, date) {
-    return interval.from < date && interval.to > date;
-}
-
-function notIntersectWithOther(currentInterval, indCurrent, day) {
-    var result = true;
-    day.forEach(function (item, ind) {
-        if (indCurrent !== ind) {
-            result = result && !belongDateInterval(currentInterval, item.to);
-            result = result && !belongDateInterval(currentInterval, item.from);
-            result = result && !belongDateInterval(item, currentInterval.from);
-            result = result && !belongDateInterval(item, currentInterval.to);
-        }
-    });
-
-    return result;
 }
