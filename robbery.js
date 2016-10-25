@@ -64,6 +64,9 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @returns {Boolean}
          */
         tryLater: function () {
+            if (!this.exists()) {
+                return false;
+            }
             var timeARobbery = (duration + 30) * 60 * 1000;
             var ind = this.countTime;
             if (this.moments[ind].to - this.moments[ind].from >= timeARobbery) {
