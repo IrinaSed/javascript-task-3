@@ -4,7 +4,7 @@
  * Сделано задание на звездочку
  * Реализовано оба метода и tryLater
  */
-exports.isStar = false;
+exports.isStar = true;
 
 /**
  * @param {Object} schedule – Расписание Банды
@@ -115,12 +115,8 @@ function findBusyTime(schedule, workingHours) {
 function busyBank(workingHours) {
     var busy = [];
     var timeZone = workingHours.from.split('+')[1];
-    if (workingHours.from.slice(0, 5) !== '00:00') {
-        busy.push({ from: '00:00+' + timeZone, to: workingHours.from });
-    }
-    if (workingHours.to.slice(0, 5) !== '23:59') {
-        busy.push({ from: workingHours.to, to: '23:59+' + timeZone });
-    }
+    busy.push({ from: '00:00+' + timeZone, to: workingHours.from });
+    busy.push({ from: workingHours.to, to: '23:59+' + timeZone });
 
     return findBusyforDay(busy);
 }
