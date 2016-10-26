@@ -73,7 +73,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 var newFrom = this.moments[ind].from + 30 * 60000;
                 this.moments[ind] = { from: newFrom, to: this.moments[ind].to };
 
-                return this.moments[ind];
+                return true;
             }
 
             while (this.countTime < this.moments.length - 1) {
@@ -81,7 +81,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 var curr = this.moments[this.countTime].from;
                 var prev = this.moments[this.countTime - 1].from;
                 if (curr - prev >= 30 * 6000) {
-                    return this.moments[this.countTime];
+                    return true;
                 }
             }
 
