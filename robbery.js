@@ -15,16 +15,18 @@ exports.isStar = true;
  * @returns {Object}
  */
 
-var DAYWEEK = ['ПН', 'ВТ', 'СР'];
-var DAY = { 'ПН': 1, 'ВТ': 2, 'СР': 3, 'ЧТ': 4, 'ПТ': 5, 'СБ': 6, 'ВС': 7 };
+var ROBBERY_TIME = ['ПН', 'ВТ', 'СР'];
+var DAY_BY_IND = { 'ПН': 1, 'ВТ': 2, 'СР': 3, 'ЧТ': 4, 'ПТ': 5, 'СБ': 6, 'ВС': 7 };
+var MS_IN_HOUR = 60 * 60 * 1000;
+var MS_IN_MINUTES = 60 * 1000;
+var OFFSET_TIME = 30;
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
-    // console.info(schedule, duration, workingHours);
     return {
-        countTime: 0,
+        currentId: 0,
 
-        moments: findMoments(findBusyInterval(schedule, workingHours), duration),
+        moments: findMoments(findBusyIntervals(schedule, workingHours), duration),
 
-        timeZone: parseInt(workingHours.from.split('+')[1]),
+        timeZone: parseInt(workingHours.from.split('+')[1], 10),
 
         /**
          * Найдено ли время
@@ -42,16 +44,16 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
          * @param {String} template
          * @returns {String}
          */
-
         format: function (template) {
             if (this.exists()) {
-                var ind = this.countTime;
-                var timeARobbery = new Date(this.moments[ind].from + this.timeZone * 60 * 60000);
-                var day = DAYWEEK[timeARobbery.getUTCDay() - 1];
+                var msRobberyTime = this.moments[this.currentId].from + this.timeZone * MS_IN_HOUR;
+                var robberyTime = new Date(msRobberyTime);
+                var dayRobbery = ROBBERY_TIME[robberyTime.getUTCDay() - 1];
 
-                return template.replace('%HH', pad(timeARobbery.getUTCHours()))
-                    .replace('%MM', pad(timeARobbery.getUTCMinutes()))
-                    .replace('%DD', day);
+                return template
+                            .replace('%HH', normalizeTime(robberyTime.getUTCHours()))
+                            .replace('%MM', normalizeTime(robberyTime.getUTCMinutes()))
+                            .replace('%DD', dayRobbery);
 
             }
 
@@ -67,20 +69,19 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
             if (!this.exists()) {
                 return false;
             }
-            var timeARobbery = (duration + 30) * 60 * 1000;
-            var ind = this.countTime;
-            if (this.moments[ind].to - this.moments[ind].from >= timeARobbery) {
-                var newFrom = this.moments[ind].from + 30 * 60000;
-                this.moments[ind] = { from: newFrom, to: this.moments[ind].to };
+            var robberyTime = (duration + OFFSET_TIME) * MS_IN_MINUTES;
+            var currentId = this.currentId;
+            if (this.moments[currentId].to - this.moments[currentId].from >= robberyTime) {
+                var offsetFrom = this.moments[this.currentId].from + OFFSET_TIME * MS_IN_MINUTES;
+                this.moments[currentId] = { from: offsetFrom, to: this.moments[currentId].to };
 
                 return true;
             }
-
-            while (this.countTime < this.moments.length - 1) {
-                this.countTime++;
-                var curr = this.moments[this.countTime].from;
-                var prev = this.moments[this.countTime - 1].from;
-                if (curr - prev >= 30 * 6000) {
+            while (this.currentId < this.moments.length - 1) {
+                this.currentId++;
+                var currentMoment = this.moments[this.currentId].from;
+                var previousMoment = this.moments[this.currentId - 1].from;
+                if (currentMoment - previousMoment >= OFFSET_TIME * MS_IN_MINUTES) {
                     return true;
                 }
             }
@@ -90,100 +91,92 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
     };
 };
 
-function pad(num) {
-    num = num < 10 ? '0' + num : num.toString();
-
-    return num;
+function normalizeTime(num) {
+    return (num < 10 ? '0' : '') + num;
 }
 
 function findBusyTime(schedule, workingHours) {
-    var busy = [];
-    addBusy(busy, schedule.Linus);
-    addBusy(busy, schedule.Rusty);
-    addBusy(busy, schedule.Danny);
-    addBusy(busy, busyBank(workingHours));
+    var intervalsBusy = [];
+    Object.keys(schedule).forEach(function (name) {
+        addBusyIntervals(intervalsBusy, schedule[name]);
+    });
+    addBusyIntervals(intervalsBusy, findBusyTimeForBank(workingHours));
 
-    return busy.sort(function (a, b) {
-        if (a.from > b.from) {
-            return 1;
-        }
-        if (a.from < b.from) {
-            return -1;
-        }
-
-        return 0;
+    return intervalsBusy.sort(function (a, b) {
+        return a.from - b.from;
     });
 }
 
-function busyBank(workingHours) {
-    var busy = [];
+function findBusyTimeForBank(workingHours) {
+    var intervalsBusyForBank = [];
     var timeZone = workingHours.from.split('+')[1];
-    busy.push({ from: '00:00+' + timeZone, to: workingHours.from });
-    busy.push({ from: workingHours.to, to: '23:59:59+' + timeZone });
+    intervalsBusyForBank.push({ from: '00:00+' + timeZone, to: workingHours.from });
+    intervalsBusyForBank.push({ from: workingHours.to, to: '23:59:59+' + timeZone });
 
-    return findBusyforDay(busy);
+    return findBusyforDay(intervalsBusyForBank);
 }
 
-function findBusyforDay(busy) {
-    var newBusy = [];
-    DAYWEEK.forEach(function (itemDay) {
-        busy.forEach(function (item) {
-            newBusy.push({ from: itemDay + ' ' + item.from, to: itemDay + ' ' + item.to });
+function findBusyforDay(intervalsBusyForBank) {
+    var intervalsBusy = [];
+    ROBBERY_TIME.forEach(function (dayRobbery) {
+        intervalsBusyForBank.forEach(function (timeBusy) {
+            intervalsBusy.push({ from: dayRobbery + ' ' + timeBusy.from,
+                to: dayRobbery + ' ' + timeBusy.to });
         });
     });
 
-    return newBusy;
+    return intervalsBusy;
 }
 
-function addBusy(busy, timetable) {
-    timetable.forEach(function (item) {
-        busy.push({ from: parseDate(item.from), to: parseDate(item.to) });
+function addBusyIntervals(intervalsBusy, timeTable) {
+    timeTable.forEach(function (time) {
+        intervalsBusy.push({ from: parseDate(time.from), to: parseDate(time.to) });
     });
 }
 
-function parseDate(note) {
-    note = note.split(' ');
-    var day = DAY[note[0]];
-    var time = note[1].split('+')[0];
-    var timeZone = pad(note[1].split('+')[1]) + '00';
+function parseDate(dateString) {
+    dateString = dateString.split(' ');
+    var day = DAY_BY_IND[dateString[0]];
+    var time = dateString[1].split('+')[0];
+    var timeZone = normalizeTime(dateString[1].split('+')[1]) + '00';
 
 
     return Date.parse('2 ' + day + ' 2016 ' + time + ' GMT+' + timeZone);
 }
 
 
-function disjointBusy(busy) {
-    var disBusy = [busy[0]];
-    var ind = 0;
-    busy.forEach(function (item) {
-        if (disBusy[ind].to <= item.to) {
-            if (disBusy[ind].to >= item.from) {
-                disBusy[ind] = { from: disBusy[ind].from, to: item.to };
+function joinIntervals(intervals) {
+    var gaps = [intervals[0]];
+    var idGap = 0;
+    intervals.forEach(function (interval) {
+        if (gaps[idGap].to <= interval.to) {
+            if (gaps[idGap].to >= interval.from) {
+                gaps[idGap] = { from: gaps[idGap].from, to: interval.to };
             } else {
-                disBusy.push(item);
-                ind++;
+                gaps.push(interval);
+                idGap++;
             }
         }
     });
 
-    return disBusy;
+    return gaps;
 }
 
-function findBusyInterval(schedule, workingHours) {
-    var busy = findBusyTime(schedule, workingHours);
-    if (busy.length !== 0) {
-        return disjointBusy(busy);
+function findBusyIntervals(schedule, workingHours) {
+    var intervalslsBusy = findBusyTime(schedule, workingHours);
+    if (intervalslsBusy.length !== 0) {
+        return joinIntervals(intervalslsBusy);
     }
 
     return [];
 }
 
 
-function findMoments(busyInterval, duration) {
+function findMoments(busyIntervals, duration) {
     var moments = [];
-    for (var i = 0; i < busyInterval.length - 1; i++) {
-        if (busyInterval[i + 1].from - busyInterval[i].to >= duration * 60000) {
-            moments.push({ from: busyInterval[i].to, to: busyInterval[i + 1].from });
+    for (var i = 0; i < busyIntervals.length - 1; i++) {
+        if (busyIntervals[i + 1].from - busyIntervals[i].to >= duration * MS_IN_MINUTES) {
+            moments.push({ from: busyIntervals[i].to, to: busyIntervals[i + 1].from });
         }
     }
 
