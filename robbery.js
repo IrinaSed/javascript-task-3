@@ -21,19 +21,18 @@ var MS_IN_HOUR = 60 * 60 * 1000;
 var MS_IN_MINUTES = 60 * 1000;
 var OFFSET_TIME = 30;
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
+    var idMoment = 0;
+    var moments = findMoments(findBusyTimes(schedule, workingHours), duration);
+    var timeZone = findTimeZone(workingHours.from);
+
     return {
-        idMoment: 0,
-
-        moments: findMoments(findBusyTimes(schedule, workingHours), duration),
-
-        timeZone: parseInt(workingHours.from.split('+')[1], 10),
 
         /**
          * Найдено ли время
          * @returns {Boolean}
          */
         exists: function () {
-            return this.moments.length > 0;
+            return moments.length > 0;
         },
 
 
@@ -48,7 +47,7 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
             if (!this.exists()) {
                 return '';
             }
-            var msRobberyTime = this.moments[this.idMoment].from + this.timeZone * MS_IN_HOUR;
+            var msRobberyTime = moments[idMoment].from + timeZone * MS_IN_HOUR;
             var robberyTime = new Date(msRobberyTime);
             var dayRobbery = ROBBERY_DAYS[robberyTime.getUTCDay() - 1];
 
@@ -69,17 +68,16 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
                 return false;
             }
             var robberyTime = (duration + OFFSET_TIME) * MS_IN_MINUTES;
-            var idMoment = this.idMoment;
-            if (this.moments[idMoment].to - this.moments[idMoment].from >= robberyTime) {
-                var offsetMoment = this.moments[this.idMoment].from + OFFSET_TIME * MS_IN_MINUTES;
-                this.moments[idMoment] = { from: offsetMoment, to: this.moments[idMoment].to };
+            if (moments[idMoment].to - moments[idMoment].from >= robberyTime) {
+                var offsetMoment = moments[idMoment].from + OFFSET_TIME * MS_IN_MINUTES;
+                moments[idMoment] = { from: offsetMoment, to: moments[idMoment].to };
 
                 return true;
             }
-            while (this.idMoment < this.moments.length - 1) {
-                this.idMoment++;
-                var currentMoment = this.moments[this.idMoment].from;
-                var previousMoment = this.moments[this.idMoment - 1].from;
+            while (idMoment < moments.length - 1) {
+                idMoment++;
+                var currentMoment = moments[idMoment].from;
+                var previousMoment = moments[idMoment - 1].from;
                 if (currentMoment - previousMoment >= OFFSET_TIME * MS_IN_MINUTES) {
                     return true;
                 }
@@ -92,6 +90,10 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
 
 function normalizeTime(num) {
     return (num < 10 ? '0' : '') + num;
+}
+
+function findTimeZone(timeString) {
+    return parseInt(timeString.split('+')[1], 10);
 }
 
 function findBusyIntervals(schedule, workingHours) {
@@ -108,7 +110,7 @@ function findBusyIntervals(schedule, workingHours) {
 
 function findBusyTimeForBank(workingHours) {
     var busyIntervalsForBank = [];
-    var timeZone = workingHours.from.split('+')[1];
+    var timeZone = findTimeZone(workingHours.from);
     busyIntervalsForBank.push({ from: '00:00+' + timeZone, to: workingHours.from });
     busyIntervalsForBank.push({ from: workingHours.to, to: '23:59:59+' + timeZone });
 
@@ -137,13 +139,13 @@ function parseDate(dateString) {
     dateString = dateString.split(' ');
     var day = DAYS_OF_WEEK[dateString[0]];
     var time = dateString[1].split('+')[0];
-    var timeZone = normalizeTime(dateString[1].split('+')[1]) + '00';
+    var timeZone = normalizeTime(findTimeZone(dateString[1])) + '00';
 
     return Date.parse('2 ' + day + ' 2016 ' + time + ' GMT+' + timeZone);
 }
 
 
-function joinIntervals(intervals) {
+function intersectIntervals(intervals) {
     var jointIntervals = [intervals[0]];
     var idInterval = 0;
     intervals.forEach(function (interval) {
@@ -164,7 +166,7 @@ function joinIntervals(intervals) {
 function findBusyTimes(schedule, workingHours) {
     var busyTimes = findBusyIntervals(schedule, workingHours);
     if (busyTimes.length !== 0) {
-        return joinIntervals(busyTimes);
+        return intersectIntervals(busyTimes);
     }
 
     return [];
