@@ -20,7 +20,10 @@ var DAYS_OF_WEEK = { 'ПН': 1, 'ВТ': 2, 'СР': 3, 'ЧТ': 4, 'ПТ': 5, 'С�
 var MS_IN_HOUR = 60 * 60 * 1000;
 var MS_IN_MINUTES = 60 * 1000;
 var OFFSET_TIME = 30;
+var OFFSET_IN_MS = OFFSET_TIME * MS_IN_MINUTES;
+
 exports.getAppropriateMoment = function (schedule, duration, workingHours) {
+    var msInDuration = duration * MS_IN_MINUTES;
     var idMoment = 0;
     var moments = findMoments(findBusyTimes(schedule, workingHours), duration);
     var timeZone = findTimeZone(workingHours.from);
@@ -67,18 +70,20 @@ exports.getAppropriateMoment = function (schedule, duration, workingHours) {
             if (!this.exists()) {
                 return false;
             }
-            var robberyTime = (duration + OFFSET_TIME) * MS_IN_MINUTES;
-            if (moments[idMoment].to - moments[idMoment].from >= robberyTime) {
-                var offsetMoment = moments[idMoment].from + OFFSET_TIME * MS_IN_MINUTES;
-                moments[idMoment] = { from: offsetMoment, to: moments[idMoment].to };
+            var moment = moments[idMoment];
+            var robberyTime = msInDuration + OFFSET_IN_MS;
+            if (moment.duration >= robberyTime) {
+                moments[idMoment] = moment.offset;
 
                 return true;
             }
             while (idMoment < moments.length - 1) {
                 idMoment++;
-                var currentMoment = moments[idMoment].from;
-                var previousMoment = moments[idMoment - 1].from;
-                if (currentMoment - previousMoment >= OFFSET_TIME * MS_IN_MINUTES) {
+                var gapMoment = createMoment({
+                    from: moments[idMoment - 1].offset.from,
+                    to: moments[idMoment].from
+                });
+                if (gapMoment.duration >= 0) {
                     return true;
                 }
             }
@@ -111,8 +116,14 @@ function findBusyIntervals(schedule, workingHours) {
 function findBusyTimeForBank(workingHours) {
     var busyIntervalsForBank = [];
     var timeZone = findTimeZone(workingHours.from);
-    busyIntervalsForBank.push({ from: '00:00+' + timeZone, to: workingHours.from });
-    busyIntervalsForBank.push({ from: workingHours.to, to: '23:59:59+' + timeZone });
+    busyIntervalsForBank.push({
+        from: '00:00+' + timeZone,
+        to: workingHours.from
+    });
+    busyIntervalsForBank.push({
+        from: workingHours.to,
+        to: '23:59:59+' + timeZone
+    });
 
     return findBusyforDay(busyIntervalsForBank);
 }
@@ -121,7 +132,8 @@ function findBusyforDay(intervalsBusyForBank) {
     var intervalsBusy = [];
     ROBBERY_DAYS.forEach(function (robberyDay) {
         intervalsBusyForBank.forEach(function (timeBusy) {
-            intervalsBusy.push({ from: robberyDay + ' ' + timeBusy.from,
+            intervalsBusy.push({
+                from: robberyDay + ' ' + timeBusy.from,
                 to: robberyDay + ' ' + timeBusy.to });
         });
     });
@@ -129,9 +141,31 @@ function findBusyforDay(intervalsBusyForBank) {
     return intervalsBusy;
 }
 
+function createMoment(moment) {
+    return {
+        get duration() {
+            return this.to - this.from;
+        },
+        get offset() {
+            return createMoment({
+                from: this.from + OFFSET_IN_MS,
+                to: this.to
+            });
+        },
+
+        from: moment.from,
+        to: moment.to
+    };
+}
+
 function addBusyIntervals(busyIntervals, timeTable) {
     timeTable.forEach(function (time) {
-        busyIntervals.push({ from: parseDate(time.from), to: parseDate(time.to) });
+        busyIntervals.push(
+            createMoment({
+                from: parseDate(time.from),
+                to: parseDate(time.to)
+            })
+        );
     });
 }
 
@@ -146,21 +180,23 @@ function parseDate(dateString) {
 
 
 function intersectIntervals(intervals) {
-    var jointIntervals = [intervals[0]];
+    var intersectedIntervals = [intervals[0]];
     var idInterval = 0;
     intervals.forEach(function (interval) {
-        if (jointIntervals[idInterval].to <= interval.to) {
-            if (jointIntervals[idInterval].to >= interval.from) {
-                var jointInterval = { from: jointIntervals[idInterval].from, to: interval.to };
-                jointIntervals[idInterval] = jointInterval;
+        if (intersectedIntervals[idInterval].to <= interval.to) {
+            if (intersectedIntervals[idInterval].to >= interval.from) {
+                intersectedIntervals[idInterval] = {
+                    from: intersectedIntervals[idInterval].from,
+                    to: interval.to
+                };
             } else {
-                jointIntervals.push(interval);
+                intersectedIntervals.push(interval);
                 idInterval++;
             }
         }
     });
 
-    return jointIntervals;
+    return intersectedIntervals;
 }
 
 function findBusyTimes(schedule, workingHours) {
@@ -177,7 +213,10 @@ function findMoments(busyIntervals, duration) {
     var moments = [];
     for (var i = 0; i < busyIntervals.length - 1; i++) {
         if (busyIntervals[i + 1].from - busyIntervals[i].to >= duration * MS_IN_MINUTES) {
-            moments.push({ from: busyIntervals[i].to, to: busyIntervals[i + 1].from });
+            moments.push(createMoment({
+                from: busyIntervals[i].to,
+                to: busyIntervals[i + 1].from
+            }));
         }
     }
 
